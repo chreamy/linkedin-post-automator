@@ -50,10 +50,10 @@ def schedule_next_task():
 if __name__ == "__main__":
     # Run main() once initially
     main()
-
+"""
     # Start the process by scheduling the first task
     schedule_next_task()
 
     while True:
         schedule.run_pending()
-        sleep(1)
+        sleep(1)"""

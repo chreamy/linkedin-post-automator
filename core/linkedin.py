@@ -131,51 +131,64 @@ class LinkedIn:
         except requests.exceptions.RequestException as e:
             custom_print(f"Error posting to LinkedIn: {e}")
 
-    def post_file(self, text, file_path_list=None):
-
-        # TODO: find all mediaUploadType's. Determine use-case. Store in fs or stream?
-
-        if file_path_list is None:
-            file_path_list = []
-
-        file_path = path.join(*file_path_list)
-
-        fname = file_path_list[-1]
-        fbinary, fsize, ftype = get_file_data( file_path, protocol="rb", incl_meta=True )
-
-        payload = {
-            "mediaUploadType": "IMAGE_SHARING",
-            "fileSize": fsize,
-            "filename": fname
-        }
-
-        content_type = get_content_type(file_path)
-
-        if not content_type:
+    def post_file(self, text, file_urls=None):
+        if file_urls is None or not isinstance(file_urls, list):
             return
 
-        try:
-            response = requests.post(self.UPLOAD_ENDPOINT, headers=self.headers, data=json.dumps(payload))
-            response.raise_for_status()
+        media_items = []
 
-            self.check_session(response.headers)
+        for file_url in file_urls:
+            # Fetch the file content from the URL
+            response = requests.get(file_url)
+            if response.status_code != 200:
+                custom_print(f"Error downloading file from {file_url}")
+                continue
 
-            data                              = response.json()["data"]["value"]
-            upload_endpoint                   = data["singleUploadUrl"]
-            self.headers["media-type-family"] = data["singleUploadHeaders"]["media-type-family"]
-            self.headers["content-type"]      = content_type
+            file_content = response.content
+            file_size = len(file_content)
+            fname = file_url.split('/')[-1]
+            content_type = response.headers.get('Content-Type', 'application/octet-stream')
 
-            response = requests.put(upload_endpoint, headers=self.headers, data=open(file_path, 'rb'))
-            response.raise_for_status()
+            payload = {
+                "mediaUploadType": "IMAGE_SHARING",
+                "fileSize": file_size,
+                "filename": fname
+            }
 
-            # image is uploaded. now post.
-            self.post(
-                text,
-                [
-                    # video category has different keys
-                    { "category": MEDIA_CATEGORY.IMAGE.name, "mediaUrn": data["urn"], "tapTargets": [] }
-                ]
-            )
+            try:
+                response = requests.post(self.UPLOAD_ENDPOINT, headers=self.headers, data=json.dumps(payload))
+                response.raise_for_status()
 
-        except requests.exceptions.RequestException as e:
-            custom_print(f"Error posting to LinkedIn: {e}")
+                self.check_session(response.headers)
+
+                data = response.json()["data"]["value"]
+                upload_endpoint = data["singleUploadUrl"]
+                self.headers["media-type-family"] = data["singleUploadHeaders"]["media-type-family"]
+                self.headers["content-type"] = content_type
+
+                upload_response = requests.put(upload_endpoint, headers=self.headers, data=file_content)
+                upload_response.raise_for_status()
+
+                media_items.append({"category": MEDIA_CATEGORY.IMAGE.name, "mediaUrn": data["urn"], "tapTargets": []})
+
+            except requests.exceptions.RequestException as e:
+                # Basic error message
+                error_message = f"Error posting file to LinkedIn: {e}"
+
+                # Attempt to get more details from the response
+                try:
+                    response = e.response
+                    if response is not None:
+                        # Include status code and response content in the error message
+                        error_detail = response.text
+                        status_code = response.status_code
+                        error_message += f" (Status Code: {status_code}, Response: {error_detail})"
+                except AttributeError:
+                    # In case the exception does not have a response attribute
+                    error_message += " (No additional details available)"
+
+                custom_print(error_message)
+                continue
+
+        if media_items:
+            self.post(text, media_items)

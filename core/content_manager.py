@@ -1,6 +1,8 @@
 from core.linkedin import LinkedIn
 from core.chatgpt import ChatGpt
 from core.scraper import Scraper
+import requests
+from core.news import News
 
 import random
 from re import sub
@@ -20,7 +22,10 @@ class ContentManager:
         # Initialize all config options as instance variables
         self.cookies            = self.config.get("cookies")
         self.chatgpt            = ChatGpt( self.config.get("open_ai_api_key") )
-        self.urls               = self.config.get("websites")
+        topic = input('\nInput a topic: ')
+        res = News.getUrls(topic)
+        self.images = [x['image'] for x in res]
+        self.urls               = res
         self.preamble           = self.config.get("gpt_preamble")
         self.bio                = self.config.get("bio")
         self.gpt_token_limit    = self.config.get("gpt_token_limit")
@@ -29,10 +34,20 @@ class ContentManager:
     def fetch_website_content(self):
         # TODO: look into using chatgpt to format scraped data.
         content = []
-        for url in self.urls:
+        urls = [x['url'] for x in self.urls]
+        for url in urls:
             data = Scraper(url, self.scrape_char_limit).fetch_content()
             if data:
-                content.append(data)
+                content.append('url: '+url+'data: '+data)
+        random.shuffle(content)
+
+        return content
+    
+    def fetch_website_content2(self):
+        # TODO: look into using chatgpt to format scraped data.
+        content = []
+        for url in self.urls:
+            content.append('url: '+url['url']+'data: '+url['text'])
         random.shuffle(content)
 
         return content
@@ -45,7 +60,6 @@ class ContentManager:
         ] + [
             {"role": "user", "content": item} for item in content
         ]
-
         gpt_res = self.chatgpt.ask(gpt_messages, self.gpt_token_limit)
 
         if not gpt_res:
@@ -54,17 +68,19 @@ class ContentManager:
         return gpt_res
 
     def post_content(self):
-
-        content         = self.fetch_website_content()
-
+        
+        if self.config.get('scraper'):
+            content         = self.fetch_website_content()
+        else:
+            content         = self.fetch_website_content2()
         gpt_response    = self.process_gpt_response(content)
         if not gpt_response:
             custom_print("Error: gpt response empty")
             return
 
-        custom_print("Post: " + sub(r'\n+', ' ', gpt_response))
-
         linkedin        = LinkedIn(self.cookies)
-
-        # linkedin.post_file(gpt_response, ["media", "burndown.png"])
-        linkedin.post(gpt_response)
+        print(gpt_response)
+        proceed = input('\nProceed? (y/n): ')
+        if proceed=='y':
+            linkedin.post_file(gpt_response,  self.images)
+        print('Posted')

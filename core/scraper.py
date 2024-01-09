@@ -9,7 +9,7 @@ class Scraper:
         self.character_limit = character_limit
 
     def fetch_content(self):
-        response = requests.get(self.url)
+        response = requests.get(self.url, timeout=2)
         if response.status_code == 200:
             return self.parse(response.text)
         return None

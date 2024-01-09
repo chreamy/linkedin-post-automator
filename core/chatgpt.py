@@ -4,7 +4,7 @@ import openai
 from utils import custom_print
 
 
-class IncompleteResponse(openai.error.OpenAIError):
+class IncompleteResponse(Exception):
     pass
 
 
@@ -14,7 +14,7 @@ class ChatGpt:
         self.openai = openai
         self.openai.api_key = api_key
 
-    def ask(self, messages, token_limit=150, model="gpt-3.5-turbo", temp=1, retry_limit=5, continuation_limit=3):
+    def ask(self, messages, token_limit=150, model="gpt-4-1106-preview", temp=1, retry_limit=5, continuation_limit=5):
         """
             Queries the GPT model for a response based on input messages. In case of incomplete
             responses, it attempts to continue the conversation until the specified continuation limit is reached.
@@ -43,24 +43,20 @@ class ChatGpt:
 
                 # Check if response is incomplete
                 if response.choices[0].finish_reason != "stop":
-                    continue
-
-                    # TODO: fix continuation
-
-                    # message was cut off
-                    # if continuation_limit:
-                    #
-                    #     # Modify the messages list to append the incomplete response and continue
-                    #     messages.append({"role": "user", "content": response.choices[0].message.content.strip()})
-                    #     messages.append({"role": "user", "content": "The previous message was cut off."})
-                    #
-                    #     continuation_limit -= 1
-                    #     custom_print(f"{continuation_limit} continuations left")
-                    #     print(response.choices[0].message.content.strip())
-                    #     continue
-                    #
-                    # else:
-                    #     raise IncompleteResponse()
+                                        
+                    if continuation_limit:
+                    
+                         # Modify the messages list to append the incomplete response and continue
+                         messages.append({"role": "user", "content": response.choices[0].message.content.strip()})
+                         messages.append({"role": "user", "content": "The previous message was cut off."})
+                    
+                         continuation_limit -= 1
+                         #custom_print(f"{continuation_limit} continuations left")
+                         #print(response.choices[0].message.content.strip())
+                         continue
+                    
+                    else:
+                         raise IncompleteResponse()
 
                 else:
 
@@ -69,7 +65,7 @@ class ChatGpt:
                         (lambda x: f"Completion Tokens: {x['completion_tokens']}")(response["usage"]),
                         (lambda x: f"Total Tokens:      {x['total_tokens']}")(response["usage"])
                     ])
-                    custom_print(f"Tokens Used:\n    {tokens_used}")
+                    #custom_print(f"Tokens Used:\n    {tokens_used}")
 
                     return response.choices[0].message.content.strip()
 
